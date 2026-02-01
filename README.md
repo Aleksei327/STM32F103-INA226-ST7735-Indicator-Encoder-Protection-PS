@@ -1,3 +1,5 @@
+
+![20260201_201156](https://github.com/user-attachments/assets/993bd9a1-72f7-42b8-ba96-80e2ae9ea129)
 STM32F103-INA226-LBP-Active-Protection-System (Advanced Version)
 An intelligent measurement and active hardware protection system for Laboratory Power Supplies (LPS) based on STM32F103C8T6 (Blue Pill), INA226 high-side current sensor, and ST7735 TFT display.
 This project is an evolution of my previous "Indicator only" project. It now features an interactive current limit control and a high-speed hardware emergency cutoff.
