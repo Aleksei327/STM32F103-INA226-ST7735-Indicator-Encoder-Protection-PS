@@ -37,7 +37,14 @@ o	Min Limit: 0.01A
 o	Step: 0.01A (10mA).
 •	Display Logic: The screen refresh is optimized to only update values when they change, preventing SPI bus congestion.
 ________________________________________
-🔌🛠 Hardware ConfigurationPinout (STM32F103C8T6)PeripheralSTM32 PinDescriptionST7735 LCDPA5 (SCK), PA7 (SDA)SPI1 Display InterfaceLCD ControlPB0 (RES), PB1 (DC), PB10 (CS)Display Command/Reset pinsINA226 (I2C)PB8 (SCL), PB9 (SDA)Software I2C (Bit-banging)EncoderPA0 (CLK), PA1 (DT)EXTI Interrupt drivenReset ButtonPA2Physical Protection ResetBuzzerPA3PWM-based Audible Alert
+🔌 Hardware ConfigurationPinout 
+Peripheral	STM32 Pin	Description
+ST7735 LCD	PA5 (SCK), PA7 (SDA)	SPI1 Display Interface
+LCD Control	PB0 (RES), PB1 (DC), PB10 (CS)	Display Command/Reset pins
+INA226 (I2C)	PB8 (SCL), PB9 (SDA)	Software I2C (Bit-banging)
+Encoder	PA0 (CLK), PA1 (DT)	EXTI Interrupt driven
+Reset Button	PA2	Physical Protection Reset
+Buzzer	PA3	PWM-based Audible Alert
 ________________________________________
 ⚙️ Software Configuration
 1. Calibration
