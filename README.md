@@ -37,15 +37,40 @@ o	Min Limit: 0.01A
 o	Step: 0.01A (10mA).
 •	Display Logic: The screen refresh is optimized to only update values when they change, preventing SPI bus congestion.
 ________________________________________
-🔌 Hardware Pinout
-Peripheral	STM32 Pin	Description
-Display (SPI1)	PA5, PA7	SCK and MOSI
-Display (Control)	PA2, PA3, PA4	CS, DC, RST
-INA226 (Soft I2C)	PB6, PB7	SCL and SDA
-Rotary Encoder	PA0, PA1	CLK (Interrupt) and DT
-Reset Button	PA2	Encoder's push button
-Buzzer	PA3	PWM Output (TIM2_CH4)
+🔌 Peripheral,STM32 Pin,Description
+ST7735 LCD,"PA5 (SCK), PA7 (SDA)",SPI1 Display Interface
+LCD Control,"PB0 (RES), PB1 (DC), PB10 (CS)",Display Command/Reset pins
+INA226 (I2C),"PB8 (SCL), PB9 (SDA)",Software I2C (Bit-banging)
+Encoder,"PA0 (CLK), PA1 (DT)",EXTI Interrupt driven
+Reset Button,PA2,Physical Protection Reset
+Buzzer,PA3,PWM-based Audible Alert
 ________________________________________
+⚙️ Software Configuration
+1. Calibration
+In INA226.h, adjust the shunt resistor value to match your hardware:
+#define INA226_SHUNT_OHMS 0.100f  // Set your shunt value (e.g., 0.1 Ohm)
+2. Stability vs. Speed
+The system uses hardware averaging. Modify INA226_Init in INA226.c:
+0x4127: No averaging (Fastest, but jumpy digits).
+0x4527: 16x Averaging (Best balance, recommended).
+0x4927: 128x Averaging (Solid digits, but 280ms protection lag).
+
+3. Voltage Correction
+If you have a constant voltage drop on your wires, adjust the offset in INA226_ReadBusVoltage:
+return (raw * 0.00125f) + 0.020f; // Adding 20mV software offset
+🛡 Protection Logic
+The system utilizes the Latch Mode of the INA226.
+Trigger: When current exceeds the limit, the INA226 pulls the ALERT pin LOW.
+Hardware Action: The external transistor immediately discharges the Power MOSFET gate.
+Software Action: The STM32 detects the alert and enters an "Alert State," stopping all I2C communication to the Mask/Enable register. This prevents the chip from accidentally clearing the latch.
+Reset: The user must manually press the Reset button to re-enable the output.
+
+📂 Project Structure
+main.c: Core logic, display updates, and protection state machine.
+INA226.c/h: Driver for the sensor, including hardware alert configuration.
+soft_i2c.c/h: Reliable bit-banged I2C implementation (works on clone STM32 chips).
+encoder.c/h: Debounced interrupt-based encoder logic.
+
 ⚠️ Critical Assembly Notes
 The ALERT pin on the INA226 is an "Open-Drain" type. You MUST use a 10k Ohm pull-up resistor between the ALERT pin and +3.3V. For a complete protection circuit, connect this pin to an LM393 comparator or a similar logic circuit to control your power supply's output pass transistors.
 
