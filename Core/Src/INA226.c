@@ -40,15 +40,30 @@ void INA226_Init(I2C_HandleTypeDef *hi2c) {
     HAL_Delay(5);
 
     // Конфигурация
-    INA226_WriteReg(INA226_REG_CONFIG, 0x4127);
-    //INA226_WriteReg(INA226_REG_CONFIG, 0x4527);
+    INA226_WriteReg(INA226_REG_CONFIG, 0x484F);
+    //Количество выборок их код и время выборки
+    //1	0x4127	2.2 мс	Пляшет (как сейчас)
+    //4	0x4327	8.8 мс	Становится лучше
+    //16	0x4527	35.2 мс	Оптимально (Рекомендую)
+    //64	0x4727	140.8 мс	Стоят уверенно
+    //128	0x4927	281.6 мс	Как вкопанные
+    //256	0x4B27	563.2 мс	Очень медленно
+    //512	0x4D27	1.12 сек	Опасно для КЗ!
+    //1024	0x4F27	2.25 сек	Защита не успеет!
+
     HAL_Delay(10);
 }
+
+
 
 float INA226_ReadBusVoltage(void) {
     uint16_t raw = INA226_ReadReg(INA226_REG_BUSVOLT);
     if (raw == 0xDEAD || raw == 0xFFFF) return 0.0f;
-    return raw * 0.00125f;
+
+    // Базовое значение (шаг 1.25 мВ) + коррекция 0.020 В (20 мВ)
+    float voltage = (raw * 0.00125f) + 0.015f;
+
+    return voltage;
 }
 
 float INA226_ReadCurrent(void) {

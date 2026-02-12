@@ -31,7 +31,7 @@ TIM_HandleTypeDef htim2; //переменная таймера
 
 
 // Текущий лимит тока (настраивается энкодером)
-static float current_limit = 1.000f;  // По умолчанию 1.000A
+static float current_limit = 0.150f;  // По умолчанию 1.000A
 
 // Флаг срабатывания Alert
 static uint8_t alert_triggered = 0;
@@ -46,11 +46,17 @@ static uint32_t last_beep_time = 0; //переменная пищалки
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
+
 void SystemClock_Config(void);
-/* USER CODE BEGIN PFP */
 void UpdateDisplay(float v_val, float i_val, float power, float capacity_ah);
-void HandleAlertIndication(void);
+// Теперь функция принимает значения напряжения и тока:
+void HandleAlertIndication(float v, float i);
 void MX_TIM2_Init(void);
+
+// Добавь эти строки, чтобы компилятор знал про пищалку:
+void Buzzer_On(void);
+void Buzzer_Off(void);
+/* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
 
@@ -151,7 +157,7 @@ int main(void)
 	      // Адаптивный шаг в зависимости от скорости вращения
 	      float step;
 
-	      if (abs(encoder_delta) > 6) {
+	      if (abs(encoder_delta) > 4) {
 	          // Быстрое вращение - шаг 0.1A
 	          step = 0.1f;
 	      } else {
@@ -169,20 +175,35 @@ int main(void)
 	      INA226_SetCurrentLimit(current_limit);
 	  }
 
-    // ==================== КНОПКА СБРОСА ALERT ====================
-    if (ResetButton_IsPressed()) {
-      INA226_ClearAlert();
-      alert_triggered = 0;
-     Buzzer_Off();  // Выключаем пищалку
+	  // ==================== ПРОВЕРКА ALERT ====================
+	  // КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: проверяем только если защита еще НЕ активна
+	  if (!alert_triggered) {
+	      if (INA226_IsAlertTriggered()) {
+	          alert_triggered = 1;
+	          // Здесь защелка сработала, и так как мы больше НЕ заходим в это условие,
+	          // регистр 0x06 больше не читается, и ПИН ALERT остается в "0" навсегда.
+	      }
+	  }
 
-      // Восстанавливаем нормальный фон
-      ST7735_FillScreen(ST7735_BLACK);
-    }
 
-    // ==================== ПРОВЕРКА ALERT ====================
-    if (INA226_IsAlertTriggered() && !alert_triggered) {
-      alert_triggered = 1;
-    }
+	  // ==================== КНОПКА СБРОСА ALERT ====================
+	  if (ResetButton_IsPressed()) {
+	      // 1. Сбрасываем железную защелку внутри ИНЫ (однократное чтение регистра 0x06)
+	      INA226_ClearAlert();
+
+	      // 2. Сбрасываем программный флаг
+	      alert_triggered = 0;
+
+	      // 3. Выключаем звук
+	      Buzzer_Off();
+
+	      // 4. Очищаем экран для возврата в нормальный режим
+	      ST7735_FillScreen(ST7735_BLACK);
+
+	      // 5. На всякий случай обновляем настройки в ИНЕ
+	      INA226_EnableCurrentAlert();
+	  }
+
 
 
 
@@ -202,13 +223,12 @@ int main(void)
 
 
     // ==================== ОБНОВЛЕНИЕ ЭКРАНА ====================
-    if (alert_triggered) {
-      HandleAlertIndication();
-    } else {
-      // Нормальный режим - чёрный фон
-      UpdateDisplay(v_val, i_val, power, capacity_ah);
-    }
-
+        if (alert_triggered) {
+          // Передаем текущие значения v_val и i_val в функцию
+          HandleAlertIndication(v_val, i_val);
+        } else {
+          UpdateDisplay(v_val, i_val, power, capacity_ah);
+        }
 
     HAL_Delay(1);  // Обновление 10 раз в секунду
 
@@ -252,7 +272,7 @@ void UpdateDisplay(float v_val, float i_val, float power, float capacity_ah) {
 /**
  * Индикация срабатывания Alert
  */
-void HandleAlertIndication(void) {
+void HandleAlertIndication(float v, float i) {
   uint32_t current_tick = HAL_GetTick();
 
   // ==================== ЦИКЛ МИГАНИЯ И ПИСКА (500мс) ====================
@@ -265,13 +285,20 @@ void HandleAlertIndication(void) {
       Buzzer_On();
       uint16_t bg_color = 0xFCE0; // Розовый
       ST7735_FillScreen(bg_color);
-      ST7735_WriteString(25, 50, "ALERT!", Font_16x26, ST7735_RED, bg_color);
+      ST7735_WriteString(25, 15, "ALERT!", Font_16x26, ST7735_RED, bg_color);
 
       char str[40];
-      sprintf(str, "Limit: %.2fA", current_limit);
-      ST7735_WriteString(20, 90, str, Font_11x18, ST7735_WHITE, bg_color);
-      ST7735_WriteString(10, 110, "Press to reset", Font_7x10, ST7735_YELLOW, bg_color);
-    }
+            // Теперь используем переменные v и i, которые пришли в функцию
+            sprintf(str, "V: %6.3f V", v);
+            ST7735_WriteString(15, 50, str, Font_11x18, ST7735_BLACK, bg_color);
+
+            sprintf(str, "I: %6.3f A", i);
+            ST7735_WriteString(15, 70, str, Font_11x18, ST7735_BLACK, bg_color);
+
+            sprintf(str, "Limit: %.2fA", current_limit);
+            ST7735_WriteString(20, 95, str, Font_11x18, ST7735_BLUE, bg_color);
+            ST7735_WriteString(10, 115, "Press to reset", Font_7x10, ST7735_YELLOW, bg_color);
+          }
     else {
       // ЭКРАН ПОГАС (ЧЕРНЫЙ) -> ВЫКЛЮЧАЕМ ЗВУК
       Buzzer_Off();
