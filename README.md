@@ -32,7 +32,7 @@ o	Software fix: Change ++ to -- logic in the EXTI0_IRQHandler within encoder.c.
 •	Pull-ups: Internal GPIO_PULLUP is enabled, but for noisy environments, adding external 4.7k - 10k resistors to +3.3V is highly recommended.
 3. User Interface & Limits (ST7735)
 •	Adjustment Bounds: Configured in main.c:
-o	Max Limit: 3.0A
+o	Max Limit: 2.38A (#define INA226_SHUNT_OHMS 0.033f // SHUNT INA226 = 0.033 Om)
 o	Min Limit: 0.01A
 o	Step: 0.01A (10mA).
 •	Display Logic: The screen refresh is optimized to only update values when they change, preventing SPI bus congestion.
@@ -54,7 +54,7 @@ ________________________________________
 ⚙️ Software Configuration
 1. Calibration
 In INA226.h, adjust the shunt resistor value to match your hardware:
-#define INA226_SHUNT_OHMS 0.100f  // Set your shunt value (e.g., 0.1 Ohm)
+#define INA226_SHUNT_OHMS 0.033f  // Set your shunt value (e.g., 0.1 Ohm)
 2. Stability vs. Speed
 The system uses hardware averaging. Modify INA226_Init in INA226.c:
 0x4127: No averaging (Fastest, but jumpy digits).
