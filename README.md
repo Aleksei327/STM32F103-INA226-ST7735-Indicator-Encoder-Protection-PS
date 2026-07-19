@@ -1,82 +1,353 @@
-
 ![20260201_201156](https://github.com/user-attachments/assets/993bd9a1-72f7-42b8-ba96-80e2ae9ea129)
-https://youtu.be/KYVpQovXies
-STM32F103-INA226-LBP-Active-Protection-System (Advanced Version)
-An intelligent measurement and active hardware protection system for Laboratory Power Supplies (LPS) based on STM32F103C8T6 (Blue Pill), INA226 high-side current sensor, and ST7735 TFT display.
-This project is an evolution of my previous "Indicator only" project. It now features an interactive current limit control and a high-speed hardware emergency cutoff.
-________________________________________
-🚀 Key Features & Functionality
-1.	High-Speed Hardware Cutoff (Active Protection):
-o	Uses the INA226 ALERT pin. Unlike software-based comparison (which is slow), the INA226 chip monitors current at the hardware level and triggers the ALERT signal near-instantaneously.
-o	Latch Mode: Once triggered, the protection stays active (latched) until the user manually resets it via the encoder button.
-2.	Software I2C (Bit-Banging):
-o	A custom-built I2C implementation. It provides extreme reliability, avoids standard STM32 hardware I2C "freezing" issues, and allows using any GPIO pins for SDA/SCL.
-3.	Rotary Encoder Interface:
-o	Real-time current limit adjustment with 10mA precision.
-o	Intelligent debouncing and non-blocking operation.
-4.	Visual & Audio Alarm System:
-o	Flashing "ALERT!" screen with current limit info.
-o	Synchronized intermittent beep using hardware PWM (TIM2) to ensure smooth operation without lagging the UI.
-________________________________________
-🛠 Technical Configuration & Customization
-1. INA226 Sensor Settings
-•	Shunt Resistor: Configured in INA226.c via #define INA226_SHUNT_OHMS 0.033f. Change this to match your resistor (e.g., 0.01 or 0.1).
-•	Alert Limits: The hardware limit is calculated based on shunt voltage. The register step is fixed at 2.5 μV.
-•	I2C Address: Default is 0x80 (A0 and A1 connected to GND). Change in INA226.h if needed.
-2. Rotary Encoder (Mechanical & Code)
-Mechanical encoders can be tricky. Here is how to tune them:
-•	Direction Fix: If values decrease when turning clockwise:
-o	Hardware fix: Swap the outer wires (CLK and DT).
-o	Software fix: Change ++ to -- logic in the EXTI0_IRQHandler within encoder.c.
-•	Debouncing: If the encoder "skips" steps, increase #define DEBOUNCE_TIME_MS (default is 15ms) to 25-30ms in encoder.c.
-•	Pull-ups: Internal GPIO_PULLUP is enabled, but for noisy environments, adding external 4.7k - 10k resistors to +3.3V is highly recommended.
-3. User Interface & Limits (ST7735)
-•	Adjustment Bounds: Configured in main.c:
-o	Max Limit: 2.38A (#define INA226_SHUNT_OHMS 0.033f // SHUNT INA226 = 0.033 Om)
-o	Min Limit: 0.01A
-o	Step: 0.01A (10mA).
-•	Display Logic: The screen refresh is optimized to only update values when they change, preventing SPI bus congestion.
-________________________________________
-🔌 Hardware ConfigurationPinout 
-Pinout (STM32F103C8T6)
 
-| Peripheral      | STM32 Pin | Description                  |
-|:----------------|:---------:|:-----------------------------|
-| **ST7735 LCD** | PA5, PA7  | SPI1 Display Interface       |
-| **LCD Control** | PB0, PB1  | RES, DC Control pins         |
-| **INA226 I2C** | PB8, PB9  | Software I2C (Bit-banging)   |
-| **Encoder** | PA0, PA1  | CLK (EXTI), DT               |
-| **Reset Button**| PA2       | Protection Reset             |
-| **Buzzer** | PA3       | PWM-based Audible Alert      |
+# Индикатор и защита лабораторного блока питания
 
+[Русский](README.md) | [English](README_EN.md)
 
-________________________________________
-⚙️ Software Configuration
-1. Calibration
-In INA226.h, adjust the shunt resistor value to match your hardware:
-#define INA226_SHUNT_OHMS 0.033f  // Set your shunt value (e.g., 0.1 Ohm)
-2. Stability vs. Speed
-The system uses hardware averaging. Modify INA226_Init in INA226.c:
-0x4127: No averaging (Fastest, but jumpy digits).
-0x4527: 16x Averaging (Best balance, recommended).
-0x4927: 128x Averaging (Solid digits, but 280ms protection lag).
+**Автор проекта: Aleksei SUBBOTIN**
 
-3. Voltage Correction
-If you have a constant voltage drop on your wires, adjust the offset in INA226_ReadBusVoltage:
-return (raw * 0.00125f) + 0.020f; // Adding 20mV software offset
-🛡 Protection Logic
-The system utilizes the Latch Mode of the INA226.
-Trigger: When current exceeds the limit, the INA226 pulls the ALERT pin LOW.
-Hardware Action: The external transistor immediately discharges the Power MOSFET gate.
-Software Action: The STM32 detects the alert and enters an "Alert State," stopping all I2C communication to the Mask/Enable register. This prevents the chip from accidentally clearing the latch.
-Reset: The user must manually press the Reset button to re-enable the output.
+© 2026 Aleksei SUBBOTIN.
 
-📂 Project Structure
-main.c: Core logic, display updates, and protection state machine.
-INA226.c/h: Driver for the sensor, including hardware alert configuration.
-soft_i2c.c/h: Reliable bit-banged I2C implementation (works on clone STM32 chips).
-encoder.c/h: Debounced interrupt-based encoder logic.
+Данная схема позволяет собрать высокоточный цифровой вольтамперметр и
+систему защиты для лабораторного блока питания по очень низкой цене. В
+устройстве используются доступные модули: STM32F103C8T6 (Blue Pill), INA226,
+TFT-дисплей ST7735, механический энкодер и пассивная пищалка.
 
-⚠️ Critical Assembly Notes
-The ALERT pin on the INA226 is an "Open-Drain" type. You MUST use a 10k Ohm pull-up resistor between the ALERT pin and +3.3V. For a complete protection circuit, connect this pin to an LM393 comparator or a similar logic circuit to control your power supply's output pass transistors.
+На аппаратуре, для которой создавался этот проект, аппаратный интерфейс I2C
+STM32F103 при работе с INA226 зависал и делал прибор ненадёжным. Эта проблема
+решена программным обходом: обмен с INA226 полностью реализован собственным
+программным I2C (bit-banging) на выводах `PB8` и `PB9`, без использования
+аппаратного контроллера I2C микроконтроллера.
 
+Программным является именно обмен по I2C. Измерение напряжения и тока,
+сравнение напряжения на шунте с заданным порогом и формирование сигнала
+`ALERT` выполняются аппаратно внутри INA226. Благодаря этому защита не зависит
+от скорости основного цикла STM32.
+
+Ссылки:
+
+- GitHub: [Aleksei327/STM32F103-INA226-ST7735-Indicator-Encoder-Protection-PS](https://github.com/Aleksei327/STM32F103-INA226-ST7735-Indicator-Encoder-Protection-PS)
+- Видео на YouTube: [демонстрация проекта](https://youtu.be/KYVpQovXies)
+- Документация INA226: [Texas Instruments INA226](https://www.ti.com/product/INA226)
+
+## Что реализовано в локальном коде
+
+- вывод напряжения, тока, мощности, накопленной ёмкости и установленного
+  ограничения тока на дисплей ST7735;
+- связь с дисплеем по аппаратному SPI1;
+- связь с INA226 по программному I2C на GPIO;
+- проверка наличия INA226 при запуске;
+- измерение напряжения, тока и мощности;
+- установка порога защиты вращением энкодера;
+- настройка выхода `ALERT` INA226 на превышение напряжения на шунте
+  (`SOL`, Shunt Voltage Over-Limit);
+- активный низкий уровень выхода `ALERT`;
+- режим защёлки `LEN` в INA226;
+- подтверждённое на собранном устройстве удержание защиты и физического
+  выхода `ALERT` в активном состоянии до ручного сброса;
+- экран `ALERT!` и прерывистый звуковой сигнал при обнаружении аварии;
+- сброс программного аварийного состояния кнопкой энкодера;
+- тест пищалки длительностью 0,5 секунды при включении.
+
+Текущие параметры прошивки:
+
+| Параметр | Значение |
+|---|---:|
+| Начальный лимит тока | 0,15 А |
+| Минимальный лимит | 0,01 А |
+| Максимальный лимит | 2,35 А |
+| Обычный шаг энкодера | 0,01 А |
+| Шаг при быстром вращении | 0,1 А |
+| Сопротивление шунта | 0,033 Ом |
+| Разрешение измерения тока | 0,001 А |
+| Адрес INA226, 7 бит | `0x40` |
+| Адрес в формате прошивки, с битом R/W | `0x80` |
+| Конфигурация INA226 | `0x484F` |
+| Программная коррекция напряжения | +0,015 В |
+| Подавление дребезга энкодера | 15 мс |
+| Частота пищалки | около 2,5 кГц |
+
+### Что означает конфигурация 0x484F
+
+`0x484F` — это 16-битное значение регистра `Configuration` INA226. Оно не
+является номером версии программы или кодом ошибки. В текущей прошивке оно
+задаёт следующие параметры:
+
+| Поле INA226 | Значение |
+|---|---|
+| Усреднение `AVG` | 128 измерений |
+| Время измерения напряжения шины `VBUSCT` | 204 мкс |
+| Время измерения напряжения на шунте `VSHCT` | 204 мкс |
+| Режим `MODE` | непрерывное измерение шунта и напряжения шины |
+
+Один полный усреднённый цикл измерения шунта и шины занимает приблизительно:
+
+`128 * (204 мкс + 204 мкс) = 52,2 мс`.
+
+Значения из таблицы на GitHub являются не более новыми версиями, а другими
+допустимыми настройками того же регистра:
+
+| Значение | Усреднение | Время одного полного цикла |
+|---|---:|---:|
+| `0x4127` | 1 измерение | около 2,2 мс |
+| `0x4527` | 16 измерений | около 35,2 мс |
+| `0x4927` | 128 измерений | около 281,6 мс |
+| `0x484F`, используется сейчас | 128 измерений | около 52,2 мс |
+
+Таким образом, `0x484F` оставляет сильное усреднение 128 измерений, как у
+`0x4927`, но использует более короткое время каждого преобразования. Это
+компромисс между устойчивыми показаниями и скоростью реакции.
+
+## Общая таблица пинов Blue Pill
+
+| Blue Pill | Назначение | Подключаемый контакт |
+|---|---|---|
+| `PA0` | вход EXTI0 | `CLK` энкодера |
+| `PA1` | цифровой вход | `DT` энкодера |
+| `PA2` | кнопка сброса, активный LOW | `SW` энкодера или отдельная кнопка |
+| `PA3` | TIM2_CH4, PWM около 2,5 кГц | пассивная пищалка через подходящий драйвер |
+| `PA5` | SPI1_SCK | `SCL`, `SCK` или `CLK` дисплея ST7735 |
+| `PA7` | SPI1_MOSI | `SDA`, `MOSI` или `DIN` дисплея ST7735 |
+| `PB0` | цифровой выход | `RES` или `RST` дисплея ST7735 |
+| `PB1` | цифровой выход | `DC`, `A0` или `RS` дисплея ST7735 |
+| `PB8` | программный I2C SCL | `SCL` INA226 |
+| `PB9` | программный I2C SDA | `SDA` INA226 |
+| `PB10` | цифровой выход | `CS` или `SS` дисплея ST7735 |
+| `3.3V` | питание логики | ST7735, INA226 и энкодер |
+| `GND` | общая земля | все модули и внешняя схема защиты |
+
+Выводы `PB6` и `PB7`, указанные в файле CubeMX как аппаратный I2C1, в
+рабочей функции `main()` не используются. INA226 обслуживается программным
+I2C на `PB8` и `PB9`.
+
+## Подключение дисплея ST7735
+
+Названия контактов отличаются у разных модулей. Ориентироваться нужно по
+назначению и альтернативным обозначениям в таблице.
+
+| Контакт ST7735 | Подключение к Blue Pill | Назначение |
+|---|---|---|
+| `VCC` | `3.3V` | питание дисплея |
+| `GND` | `GND` | общая земля |
+| `SCL`, `SCK`, `CLK` | `PA5` | тактовая линия SPI1 |
+| `SDA`, `MOSI`, `DIN` | `PA7` | данные от STM32 к дисплею |
+| `RES`, `RST`, `RESET` | `PB0` | аппаратный сброс дисплея |
+| `DC`, `A0`, `RS` | `PB1` | выбор команды или данных |
+| `CS`, `SS` | `PB10` | выбор дисплея |
+| `LED`, `BL`, `BLK` | `3.3V` | подсветка |
+| `MISO`, `SDO` | не подключать | прошивка данные с дисплея не читает |
+
+Безопаснее питать модуль и его логические входы от 3,3 В. Если на конкретном
+модуле у светодиода подсветки нет токоограничивающего резистора, резистор
+нужно добавить последовательно с контактом `LED`/`BL`.
+
+В коде выбран дисплей 160x128 на контроллере ST7735S в ориентации
+`rotate left`. Настройки находятся в `Core/Inc/st7735.h`.
+
+## Подключение энкодера
+
+Для распространённого модуля KY-040 или совместимого:
+
+| Контакт энкодера | Подключение к Blue Pill | Назначение |
+|---|---|---|
+| `+`, `VCC` | `3.3V` | питание модуля |
+| `GND` | `GND` | общая земля |
+| `CLK` | `PA0` | импульсы энкодера, прерывание EXTI0 |
+| `DT` | `PA1` | определение направления |
+| `SW` | `PA2` | кнопка сброса аварийного состояния |
+
+Входы `PA0`, `PA1` и `PA2` имеют внутреннюю подтяжку к 3,3 В. Кнопка должна
+при нажатии замыкать `PA2` на `GND`. Для длинных проводов можно установить
+внешние подтягивающие резисторы 4,7-10 кОм от `CLK`, `DT` и `SW` к 3,3 В.
+
+Если направление регулировки получилось обратным, можно поменять местами
+`CLK` и `DT` либо изменить направление счётчика в `EXTI0_IRQHandler()` в
+`Core/Src/encoder.c`.
+
+## Подключение INA226
+
+### Контакты самой микросхемы INA226
+
+Таблица соответствует корпусу DGS, VSSOP-10. У готового модуля порядок
+контактов может быть другим, поэтому следует смотреть обозначения на плате.
+
+| Номер | Контакт INA226 | Подключение |
+|---:|---|---|
+| 1 | `A1` | `GND`, для адреса `0x40` |
+| 2 | `A0` | `GND`, для адреса `0x40` |
+| 3 | `ALERT` | подтяжка 10 кОм к 3,3 В и вход внешней схемы отключения |
+| 4 | `SDA` | `PB9` Blue Pill |
+| 5 | `SCL` | `PB8` Blue Pill |
+| 6 | `VS` | `3.3V` Blue Pill |
+| 7 | `GND` | общая `GND` |
+| 8 | `VBUS` | измеряемое напряжение, обычно сторона нагрузки после шунта |
+| 9 | `IN-` | сторона шунта, идущая к нагрузке |
+| 10 | `IN+` | сторона шунта, идущая к плюсу источника |
+
+`VS` является питанием микросхемы и допускает только 2,7-5,5 В. Его нельзя
+подключать к силовой шине лабораторного блока питания, если там больше 5,5 В.
+Вход `VBUS` предназначен для измерения силовой шины и у INA226 допускает
+напряжение до 36 В.
+
+### Контакты типового модуля INA226
+
+| Контакт модуля | Подключение |
+|---|---|
+| `VCC`, `VS` | `3.3V` Blue Pill |
+| `GND` | общая `GND` |
+| `SCL` | `PB8` Blue Pill |
+| `SDA` | `PB9` Blue Pill |
+| `A0` | `GND` |
+| `A1` | `GND` |
+| `ALERT`, `AL` | подтяжка 10 кОм к 3,3 В и внешняя схема отключения |
+| `IN+`, `VIN+` | плюс источника перед шунтом |
+| `IN-`, `VIN-` | после шунта, к плюсу нагрузки |
+| `VBUS` | к `IN-`, если этот контакт не соединён с ним на модуле |
+
+На многих модулях A0, A1, VBUS и шунт уже соединены дорожками. Перед
+монтажом нужно проверить схему именно своего модуля мультиметром или по
+документации продавца.
+
+Линии `SCL` и `SDA` настроены как открытый сток без внутренних подтяжек.
+Нужны внешние подтягивающие резисторы к 3,3 В. В коде указано 10 кОм; на
+большинстве готовых модулей INA226 подтяжки уже установлены.
+
+## Как работают ALERT и кнопка сброса
+
+1. Прошивка рассчитывает падение напряжения на шунте:
+
+   `Uпорог = Iпорог * 0,033 Ом`.
+
+2. Полученное напряжение переводится в значение регистра `Alert Limit`
+   с шагом 2,5 мкВ.
+3. В регистре `Mask/Enable` включаются:
+   - `SOL` — превышение напряжения на шунте;
+   - `LEN` — режим защёлки;
+   - `APOL = 0` — активный низкий уровень.
+4. INA226 аппаратно сравнивает результат измерения шунта с порогом. При
+   превышении тока она устанавливает флаг `AFF` и переводит физический выход
+   `ALERT` в состояние LOW.
+5. Пока программная авария ещё не зарегистрирована, STM32 читает регистр
+   `Mask/Enable` (`0x06`) и проверяет флаг `AFF`.
+6. Обнаружив `AFF`, STM32 устанавливает собственный флаг `alert_triggered`.
+   После этого на дисплее мигает `ALERT!`, работает прерывистая пищалка, а
+   повторное чтение регистра `0x06` в функции проверки прекращается.
+7. На собранном устройстве защита и физический выход `ALERT` INA226
+   подтверждённо остаются активными до ручного сброса.
+8. При нажатии `SW` энкодера вход `PA2` замыкается на `GND`. STM32 выполняет
+   `INA226_ClearAlert()`, сбрасывает свой флаг `alert_triggered` и повторно
+   включает режим `SOL + LEN` в INA226.
+9. Если ток уже ниже порога, устройство продолжает нормальную работу. Если
+   перегрузка осталась, INA226 при следующем измерении снова установит `AFF`,
+   активирует `ALERT`, и программа опять перейдёт в аварийный режим.
+
+`ALERT` является выходом с открытым стоком. Обязательна подтяжка примерно
+10 кОм к 3,3 В. Этот вывод предназначен для логического сигнала и не должен
+напрямую подключаться к затвору силового MOSFET или к высокому напряжению.
+Между `ALERT` и силовой частью требуется подходящая схема отключения:
+транзисторный драйвер, оптрон, компаратор и/или аппаратная защёлка.
+
+В текущей прошивке `ALERT` не подключён к отдельному GPIO Blue Pill.
+STM32 узнаёт об аварии чтением флага `AFF` по I2C. Сам выход `ALERT` должен
+идти во внешнюю аппаратную схему отключения. Её точная принципиальная схема
+в репозитории отсутствует, поэтому назначить конкретные выводы внешнего
+транзистора, компаратора или силового MOSFET только по этому коду нельзя.
+
+### Что означает сброс ALERT чтением регистра 0x06
+
+У INA226 нет отдельной I2C-команды с названием «сбросить ALERT». По
+документации Texas Instruments подтверждением и сбросом защёлки при `LEN = 1`
+служит чтение регистра `Mask/Enable` (`0x06`).
+
+То есть выражение «STM32 программно сбрасывает ALERT» означает следующее:
+
+1. STM32 получает нажатие кнопки на `PA2`.
+2. Функция `INA226_ClearAlert()` читает регистр `0x06` по программному I2C.
+3. INA226 воспринимает это чтение как подтверждение аварии и отпускает свою
+   внутреннюю защёлку.
+4. STM32 очищает программное аварийное состояние и снова записывает настройки
+   `SOL + LEN`.
+5. INA226 продолжает аппаратно контролировать ток.
+6. При нормальном токе `ALERT` остаётся отпущенным; при сохраняющейся
+   перегрузке INA226 снова активирует `ALERT` при очередном преобразовании.
+
+Обычное чтение регистров напряжения, тока и мощности не сбрасывает защёлку.
+Такое действие связано именно с чтением регистра `Mask/Enable` (`0x06`).
+
+В текущей программе регистр `0x06` также один раз читается в
+`INA226_IsAlertTriggered()`, чтобы STM32 мог увидеть флаг `AFF`. Несмотря на
+это, на собранном устройстве физический выход `ALERT` и защита проверенно
+удерживаются до кнопки. Функционально устройство работает именно по описанной
+выше схеме: кнопка даёт команду на программный сброс, после чего INA226 снова
+проверяет ток и либо продолжает работу, либо повторно включает защиту.
+
+## Подключение пищалки
+
+На `PA3` формируется PWM около 2,5 кГц, поэтому прошивка рассчитана на
+пассивную пищалку.
+
+Для маломощного пьезоизлучателя допустимо:
+
+| Контакт | Подключение |
+|---|---|
+| `+` | `PA3` |
+| `-` | `GND` |
+
+Если пищалка потребляет ток, превышающий допустимый ток GPIO, её нужно
+включать через NPN-транзистор или MOSFET с общим `GND`. Нельзя питать
+мощную или электромагнитную пищалку непосредственно от `PA3`.
+
+## Порядок проверки
+
+1. Выполнять все соединения только при отключённом питании.
+2. Проверить общую землю Blue Pill, ST7735, INA226, энкодера и схемы защиты.
+3. Убедиться, что `VS` INA226 получает 3,3 В, а не напряжение силовой шины.
+4. Проверить подтяжки `SCL`, `SDA` и `ALERT` к 3,3 В.
+5. При включении пищалка должна подать сигнал длительностью 0,5 секунды.
+6. На дисплее должны появиться `Init INA226...` и затем `INA226 OK!`.
+7. Проверить изменение лимита энкодером без подключённой мощной нагрузки.
+8. Проверять аппаратное отключение сначала от лабораторного источника с
+   малым ограничением тока и с безопасной тестовой нагрузкой.
+9. Отдельно проверить осциллографом уровень `ALERT` и удержание отключения
+   после устранения перегрузки.
+
+## Исправления относительно прежнего описания на GitHub
+
+- В коде максимум равен 2,35 А, а не 2,38 А.
+- Начальный лимит равен 0,15 А; устаревший комментарий о 1,00 А исправлен.
+- Коррекция напряжения равна +0,015 В, а не +0,020 В.
+- В рабочем коде используется `0x484F`: усреднение 128 измерений и короткое
+  время преобразования 204 мкс. Значения в GitHub являются альтернативными
+  настройками скорости и усреднения, а не другими версиями прошивки.
+- Дисплей перерисовывается в каждом цикле; оптимизация обновления только
+  изменившихся значений не реализована.
+- Отдельного GPIO для чтения физического выхода `ALERT` нет.
+- На собранном устройстве программный сброс INA226, повторная проверка тока и
+  удержание физического выхода `ALERT` до нажатия кнопки подтверждены
+  практически.
+- При аудите в `Core/Src/main.c` была найдена и исправлена опечатка в имени
+  шрифта аварийного экрана: `Font_11x1е8` заменено на `Font_11x18`.
+
+## Основные файлы проекта
+
+- `Core/Src/main.c` — основной цикл, интерфейс и аварийное состояние;
+- `Core/Src/INA226.c` и `Core/Inc/INA226.h` — измерения и настройка ALERT;
+- `Core/Src/soft_i2c.c` — программный I2C на PB8/PB9;
+- `Core/Src/encoder.c` — энкодер, кнопка и пищалка;
+- `Core/Src/st7735.c` и `Core/Inc/st7735.h` — драйвер дисплея;
+- `Core/Src/spi.c` — настройка SPI1.
+
+## Готовая прошивка
+
+В каталоге [`firmware`](firmware) находятся:
+
+- [`LBP_Indicator_v1.1.hex`](firmware/LBP_Indicator_v1.1.hex) для записи
+  через ST-LINK или STM32CubeProgrammer;
+- [`LBP_Indicator_v1.1.bin`](firmware/LBP_Indicator_v1.1.bin), адрес записи
+  `0x08000000`;
+- архив с HEX и инструкцией;
+- полный форумный архив с прошивкой, PDF и документацией;
+- файл с контрольными суммами SHA-256.
+
+Подробная русская инструкция в PDF:
+[`LBP_Indicator_RU.pdf`](docs/LBP_Indicator_RU.pdf).

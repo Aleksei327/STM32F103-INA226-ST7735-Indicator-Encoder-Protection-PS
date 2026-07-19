@@ -1,0 +1,15 @@
+# STM32CubeIDE build output
+Debug/
+Release/
+
+# Local editor and generated output
+.metadata/
+output/
+release/
+tmp/
+*.code-workspace
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+*~

@@ -60,7 +60,7 @@ float INA226_ReadBusVoltage(void) {
     uint16_t raw = INA226_ReadReg(INA226_REG_BUSVOLT);
     if (raw == 0xDEAD || raw == 0xFFFF) return 0.0f;
 
-    // Базовое значение (шаг 1.25 мВ) + коррекция 0.020 В (20 мВ)
+    // Базовое значение (шаг 1.25 мВ) + коррекция 0.015 В (15 мВ)
     float voltage = (raw * 0.00125f) + 0.015f;
 
     return voltage;
@@ -121,12 +121,12 @@ float INA226_GetCurrentLimit(void) {
 // Включить Alert по превышению тока
 void INA226_EnableCurrentAlert(void) {
     // Конфигурация Mask/Enable:
-    // - POL (bit 11) = Power Over-Limit
+    // - SOL (bit 15) = Shunt Voltage Over-Limit
     // - AFF (bit 4) = Alert Function Flag
     // - APOL (bit 1) = 0 (Active LOW) или 1 (Active HIGH)
     // - LEN (bit 0) = 1 (Latch enable - требует сброса)
 
-    uint16_t mask = INA226_MASK_SOL |  // Power Over-Limit alert
+    uint16_t mask = INA226_MASK_SOL |  // Shunt Voltage Over-Limit alert
                     INA226_MASK_LEN;    // Latch enable
 
     INA226_WriteReg(INA226_REG_MASK_ENABLE, mask);

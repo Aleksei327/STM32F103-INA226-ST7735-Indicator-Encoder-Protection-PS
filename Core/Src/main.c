@@ -31,7 +31,7 @@ TIM_HandleTypeDef htim2; //переменная таймера
 
 
 // Текущий лимит тока (настраивается энкодером)
-static float current_limit = 0.150f;  // По умолчанию 1.000A
+static float current_limit = 0.150f;  // По умолчанию 0.150A
 
 // Флаг срабатывания Alert
 static uint8_t alert_triggered = 0;
@@ -39,10 +39,7 @@ static uint8_t alert_triggered = 0;
 // Для мигания экрана при Alert
 static uint32_t last_blink_time = 0;
 static uint8_t blink_state = 0;
-static uint32_t last_beep_time = 0; //переменная пищалки
 
-// Для прерывистой пищалки
-//static uint32_t last_beep_time = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
