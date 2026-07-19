@@ -1,0 +1,5 @@
+# Preserve release artifacts byte-for-byte.
+*.hex binary
+*.bin binary
+*.pdf binary
+*.zip binary
